@@ -1,12 +1,12 @@
 import { getAllPosts } from "@/lib/posts";
 import { site } from "@/lib/site";
 
-export const dynamic = "force-static";
+export const revalidate = 300;
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function GET() {
-  const items = getAllPosts()
+export async function GET() {
+  const items = (await getAllPosts())
     .slice(0, 30)
     .map(
       (p) => `<item>

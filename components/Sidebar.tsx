@@ -2,10 +2,10 @@ import Link from "next/link";
 import { getAllPosts, getCategories, getTags } from "@/lib/posts";
 import { site } from "@/lib/site";
 
-export default function Sidebar() {
-  const posts = getAllPosts();
-  const tags = getTags();
-  const cats = getCategories();
+export default async function Sidebar() {
+  const posts = await getAllPosts();
+  const tags = await getTags();
+  const cats = await getCategories();
   const words = posts.reduce((s, p) => s + p.words, 0);
   return (
     <aside className="sidebar">

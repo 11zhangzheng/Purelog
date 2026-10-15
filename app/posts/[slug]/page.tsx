@@ -4,17 +4,12 @@ import type { Metadata } from "next";
 import ArticleTools from "@/components/ArticleTools";
 import Comments from "@/components/Comments";
 import Toc from "@/components/Toc";
-import { formatDate, getAdjacent, getAllPosts, getPost, getRelated } from "@/lib/posts";
+import { formatDate, getAdjacent, getPost, getRelated } from "@/lib/posts";
 import { site } from "@/lib/site";
-
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return getAllPosts().map((p) => ({ slug: p.slug }));
-}
+import { getCurrentUser } from "@/lib/auth";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const post = getPost((await params).slug);
+  const post = await getPost((await params).slug);
   if (!post) return {};
   return {
     title: post.title,
@@ -34,17 +29,19 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 }
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
-  const post = getPost((await params).slug);
+  const post = await getPost((await params).slug);
   if (!post) notFound();
-  const { newer, older } = getAdjacent(post.slug);
-  const related = getRelated(post);
+  const { newer, older } = await getAdjacent(post.slug);
+  const related = await getRelated(post);
+  const user = await getCurrentUser();
+  const canEdit = post.source === "db" && user?.id === post.authorId;
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
     datePublished: post.date,
     dateModified: post.updated || post.date,
-    author: { "@type": "Person", name: site.author },
+    author: { "@type": "Person", name: post.author },
     description: post.summary,
   };
 
@@ -55,10 +52,11 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
         <article className="card article">
           <h1 className="article-title">{post.title}</h1>
           <div className="article-meta">
-            <span className="author">{site.author}</span>
+            <span className="author">{post.author}</span>
             <time dateTime={post.date}>{formatDate(post.date)}</time>
             <span>约 {post.words} 字</span>
             <span>阅读 {post.readingMinutes} 分钟</span>
+            {canEdit && <Link href={`/write/${post.slug}`} className="link">编辑</Link>}
           </div>
           {post.cover && (
             // eslint-disable-next-line @next/next/no-img-element

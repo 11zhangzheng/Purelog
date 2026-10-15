@@ -2,6 +2,8 @@ import Link from "next/link";
 import { site } from "@/lib/site";
 import ThemeToggle from "./ThemeToggle";
 import SearchBox from "./SearchBox";
+import UserMenu from "./UserMenu";
+import { getCurrentUser } from "@/lib/auth";
 
 const nav = [
   { href: "/", label: "首页" },
@@ -10,7 +12,8 @@ const nav = [
   { href: "/about", label: "关于" },
 ];
 
-export default function Header() {
+export default async function Header() {
+  const user = await getCurrentUser();
   return (
     <header className="header">
       <div className="container header-inner">
@@ -27,7 +30,9 @@ export default function Header() {
         </nav>
         <div className="header-right">
           <SearchBox />
+          <Link href="/write" className="btn-primary write-btn">✎ 写文章</Link>
           <ThemeToggle />
+          {user ? <UserMenu name={user.display_name} /> : <Link href="/login" className="login-link">登录 | 注册</Link>}
         </div>
       </div>
     </header>

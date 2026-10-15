@@ -3,8 +3,8 @@ import { formatDate, getAllPosts, type PostMeta } from "@/lib/posts";
 
 export const metadata = { title: "归档" };
 
-export default function ArchivePage() {
-  const posts = getAllPosts();
+export default async function ArchivePage() {
+  const posts = await getAllPosts();
   const byYear = new Map<string, PostMeta[]>();
   posts.forEach((p) => {
     const y = p.date.slice(0, 4);

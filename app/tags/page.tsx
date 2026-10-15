@@ -3,8 +3,8 @@ import { getTags } from "@/lib/posts";
 
 export const metadata = { title: "标签" };
 
-export default function TagsPage() {
-  const tags = getTags();
+export default async function TagsPage() {
+  const tags = await getTags();
   return (
     <div className="card page-card">
       <h1 className="page-title">全部标签 <small>{tags.length}</small></h1>

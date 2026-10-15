@@ -1,15 +1,20 @@
-import fs from "node:fs";
-import path from "node:path";
-import matter from "gray-matter";
-import { getAllPosts } from "@/lib/posts";
+import { getAllPosts, getPostSource } from "@/lib/posts";
+import { plainText } from "@/lib/markdown";
 
-export const dynamic = "force-static";
+export const revalidate = 60;
 
-export function GET() {
-  const data = getAllPosts().map((p) => {
-    const { content } = matter(fs.readFileSync(path.join(process.cwd(), "posts", `${p.slug}.md`), "utf8"));
-    const text = content.replace(/```[\s\S]*?```/g, " ").replace(/[#>*_`\[\]()!|-]/g, " ").replace(/\s+/g, " ").slice(0, 3000);
-    return { slug: p.slug, title: p.title, summary: p.summary, tags: p.tags, category: p.category, date: p.date, text };
-  });
+export async function GET() {
+  const posts = await getAllPosts();
+  const data = await Promise.all(
+    posts.map(async (p) => ({
+      slug: p.slug,
+      title: p.title,
+      summary: p.summary,
+      tags: p.tags,
+      category: p.category,
+      date: p.date,
+      text: plainText(await getPostSource(p.slug)).slice(0, 3000),
+    })),
+  );
   return Response.json(data);
 }

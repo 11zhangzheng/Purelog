@@ -1,13 +1,7 @@
 import { notFound } from "next/navigation";
 import PostList from "@/components/PostList";
 import Sidebar from "@/components/Sidebar";
-import { getAllPosts, getTags } from "@/lib/posts";
-
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return getTags().map((t) => ({ tag: t.name }));
-}
+import { getAllPosts } from "@/lib/posts";
 
 export async function generateMetadata({ params }: { params: Promise<{ tag: string }> }) {
   return { title: `标签：${decodeURIComponent((await params).tag)}` };
@@ -15,7 +9,7 @@ export async function generateMetadata({ params }: { params: Promise<{ tag: stri
 
 export default async function TagPage({ params }: { params: Promise<{ tag: string }> }) {
   const tag = decodeURIComponent((await params).tag);
-  const posts = getAllPosts().filter((p) => p.tags.includes(tag));
+  const posts = (await getAllPosts()).filter((p) => p.tags.includes(tag));
   if (!posts.length) notFound();
   return (
     <div className="layout">

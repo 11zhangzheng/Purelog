@@ -1,10 +1,13 @@
+import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { Marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import hljs from "highlight.js";
-import GithubSlugger from "github-slugger";
+import { cache } from "react";
+import { query } from "./db";
+import { countWords, plainText, renderMarkdown, type Heading } from "./markdown";
+import { site } from "./site";
+
+export type { Heading };
 
 const POSTS_DIR = path.join(process.cwd(), "posts");
 
@@ -20,123 +23,179 @@ export type PostMeta = {
   draft: boolean;
   readingMinutes: number;
   words: number;
+  author: string;
+  authorId?: number;
+  source: "file" | "db";
 };
 
-export type Heading = { id: string; text: string; level: number };
 export type Post = PostMeta & { html: string; headings: Heading[] };
 
-function countWords(md: string) {
-  const text = md.replace(/```[\s\S]*?```/g, "").replace(/[#>*_`\-\[\]()!]/g, "");
-  const cjk = (text.match(/[一-龥]/g) || []).length;
-  const en = (text.replace(/[一-龥]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-  return cjk + en;
+type ArticleRow = {
+  id: number;
+  slug: string;
+  author_id: number;
+  display_name: string;
+  title: string;
+  content: string;
+  summary: string;
+  category: string;
+  tags: string;
+  cover: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+};
+
+const iso = (d: string | Date) => new Date(d).toISOString();
+
+function metaFromMarkdown(content: string) {
+  const words = countWords(content);
+  return { words, readingMinutes: Math.max(1, Math.round(words / 400)), excerpt: plainText(content).slice(0, 120) };
 }
 
+// ---------- Markdown 文件中的文章 ----------
+
 function readRaw(slug: string) {
+  if (!/^[\w\-一-龥]+$/.test(slug)) return null;
   const file = path.join(POSTS_DIR, `${slug}.md`);
   if (!fs.existsSync(file)) return null;
   return matter(fs.readFileSync(file, "utf8"));
 }
 
-function toMeta(slug: string, data: Record<string, any>, content: string): PostMeta {
-  const words = countWords(content);
-  const plain = content.replace(/```[\s\S]*?```/g, "").replace(/[#>*_`]/g, "").replace(/\s+/g, " ").trim();
-  const d = data.date ? new Date(data.date) : new Date(0);
+function fileMeta(slug: string, data: Record<string, any>, content: string): PostMeta {
+  const m = metaFromMarkdown(content);
   return {
     slug,
     title: String(data.title ?? slug),
-    date: d.toISOString(),
-    updated: data.updated ? new Date(data.updated).toISOString() : undefined,
+    date: iso(data.date ? new Date(data.date) : new Date(0)),
+    updated: data.updated ? iso(data.updated) : undefined,
     category: String(data.category ?? "随笔"),
     tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
-    summary: String(data.summary ?? plain.slice(0, 120)),
+    summary: String(data.summary ?? m.excerpt),
     cover: data.cover,
     draft: Boolean(data.draft),
-    readingMinutes: Math.max(1, Math.round(words / 400)),
-    words,
+    readingMinutes: m.readingMinutes,
+    words: m.words,
+    author: site.author,
+    source: "file",
   };
 }
 
-let cache: PostMeta[] | null = null;
+let fileCache: PostMeta[] | null = null;
 
-export function getAllPosts(): PostMeta[] {
-  if (cache && process.env.NODE_ENV === "production") return cache;
+function getFilePosts(): PostMeta[] {
+  if (fileCache && process.env.NODE_ENV === "production") return fileCache;
   if (!fs.existsSync(POSTS_DIR)) return [];
-  const list = fs
+  fileCache = fs
     .readdirSync(POSTS_DIR)
     .filter((f) => f.endsWith(".md"))
     .map((f) => {
       const slug = f.replace(/\.md$/, "");
       const { data, content } = readRaw(slug)!;
-      return toMeta(slug, data, content);
+      return fileMeta(slug, data, content);
     })
-    .filter((p) => !p.draft || process.env.NODE_ENV !== "production")
-    .sort((a, b) => b.date.localeCompare(a.date));
-  cache = list;
-  return list;
+    .filter((p) => !p.draft || process.env.NODE_ENV !== "production");
+  return fileCache;
 }
 
-export function getPost(slug: string): Post | null {
+// ---------- 网页端发布、存于数据库的文章 ----------
+
+const ARTICLE_SELECT = `SELECT a.*, u.display_name FROM articles a JOIN users u ON u.id = a.author_id`;
+
+function rowMeta(r: ArticleRow): PostMeta {
+  const m = metaFromMarkdown(r.content);
+  let tags: string[] = [];
+  try {
+    tags = JSON.parse(r.tags);
+  } catch {}
+  return {
+    slug: r.slug,
+    title: r.title,
+    date: iso(r.created_at),
+    updated: iso(r.updated_at),
+    category: r.category,
+    tags,
+    summary: r.summary || m.excerpt,
+    cover: r.cover || undefined,
+    draft: false,
+    readingMinutes: m.readingMinutes,
+    words: m.words,
+    author: r.display_name,
+    authorId: r.author_id,
+    source: "db",
+  };
+}
+
+async function getDbPosts(): Promise<PostMeta[]> {
+  try {
+    const rows = await query<ArticleRow>(`${ARTICLE_SELECT} ORDER BY a.created_at DESC`);
+    return rows.map(rowMeta);
+  } catch (e) {
+    if (process.env.NEXT_PHASE === "phase-production-build") return [];
+    console.error("[purelog] 读取数据库文章失败，仅展示 Markdown 文章：", (e as Error).message);
+    return [];
+  }
+}
+
+export async function getArticleRow(slug: string) {
+  const rows = await query<ArticleRow>(`${ARTICLE_SELECT} WHERE a.slug = $1`, [slug]);
+  return rows[0] ?? null;
+}
+
+export async function getPostsByAuthor(authorId: number) {
+  const rows = await query<ArticleRow>(`${ARTICLE_SELECT} WHERE a.author_id = $1 ORDER BY a.created_at DESC`, [authorId]);
+  return rows.map(rowMeta);
+}
+
+// ---------- 对外接口 ----------
+
+export const getAllPosts = cache(async (): Promise<PostMeta[]> => {
+  const all = [...getFilePosts(), ...(await getDbPosts())];
+  return all.sort((a, b) => b.date.localeCompare(a.date));
+});
+
+export async function getPost(slug: string): Promise<Post | null> {
   const raw = readRaw(slug);
-  if (!raw) return null;
-  const meta = toMeta(slug, raw.data, raw.content);
-  if (meta.draft && process.env.NODE_ENV === "production") return null;
-
-  const slugger = new GithubSlugger();
-  const headings: Heading[] = [];
-  const marked = new Marked(
-    markedHighlight({
-      emptyLangClass: "hljs",
-      langPrefix: "hljs language-",
-      highlight(code, lang) {
-        const language = hljs.getLanguage(lang) ? lang : "plaintext";
-        return hljs.highlight(code, { language }).value;
-      },
-    }),
-  );
-  marked.use({
-    renderer: {
-      heading({ tokens, depth }) {
-        const text = this.parser.parseInline(tokens);
-        const plain = text.replace(/<[^>]+>/g, "");
-        const id = slugger.slug(plain);
-        if (depth >= 2 && depth <= 4) headings.push({ id, text: plain, level: depth });
-        return `<h${depth} id="${id}"><a class="anchor" href="#${id}">#</a>${text}</h${depth}>\n`;
-      },
-      link({ href, title, tokens }) {
-        const text = this.parser.parseInline(tokens);
-        const ext = /^https?:\/\//.test(href);
-        return `<a href="${href}"${title ? ` title="${title}"` : ""}${ext ? ' target="_blank" rel="noopener noreferrer"' : ""}>${text}</a>`;
-      },
-      image({ href, title, text }) {
-        return `<img src="${href}" alt="${text}"${title ? ` title="${title}"` : ""} loading="lazy" />`;
-      },
-    },
-  });
-  const html = marked.parse(raw.content, { async: false }) as string;
-  return { ...meta, html, headings };
+  if (raw) {
+    const meta = fileMeta(slug, raw.data, raw.content);
+    if (meta.draft && process.env.NODE_ENV === "production") return null;
+    return { ...meta, ...renderMarkdown(raw.content) };
+  }
+  try {
+    const row = await getArticleRow(slug);
+    if (!row) return null;
+    return { ...rowMeta(row), ...renderMarkdown(row.content, { sanitize: true }) };
+  } catch {
+    return null;
+  }
 }
 
-export function getTags() {
+export async function getPostSource(slug: string) {
+  const raw = readRaw(slug);
+  return raw ? raw.content : (await getArticleRow(slug))?.content ?? "";
+}
+
+function countBy(values: string[]) {
   const map = new Map<string, number>();
-  getAllPosts().forEach((p) => p.tags.forEach((t) => map.set(t, (map.get(t) || 0) + 1)));
+  values.forEach((v) => map.set(v, (map.get(v) || 0) + 1));
   return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
-export function getCategories() {
-  const map = new Map<string, number>();
-  getAllPosts().forEach((p) => map.set(p.category, (map.get(p.category) || 0) + 1));
-  return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+export async function getTags() {
+  return countBy((await getAllPosts()).flatMap((p) => p.tags));
 }
 
-export function getAdjacent(slug: string) {
-  const all = getAllPosts();
+export async function getCategories() {
+  return countBy((await getAllPosts()).map((p) => p.category));
+}
+
+export async function getAdjacent(slug: string) {
+  const all = await getAllPosts();
   const i = all.findIndex((p) => p.slug === slug);
   return { newer: i > 0 ? all[i - 1] : null, older: i >= 0 && i < all.length - 1 ? all[i + 1] : null };
 }
 
-export function getRelated(post: PostMeta, n = 5) {
-  return getAllPosts()
+export async function getRelated(post: PostMeta, n = 5) {
+  return (await getAllPosts())
     .filter((p) => p.slug !== post.slug)
     .map((p) => ({ p, score: p.tags.filter((t) => post.tags.includes(t)).length * 2 + (p.category === post.category ? 1 : 0) }))
     .filter((x) => x.score > 0)
