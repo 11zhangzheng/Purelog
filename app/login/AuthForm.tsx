@@ -65,7 +65,7 @@ export default function AuthForm({ next, initialMode, inviteRequired }: { next: 
   return (
     <div className="card auth-card">
       <h1>{mode === "login" ? "登录 Purelog" : "注册 Purelog"}</h1>
-      <p className="muted">登录后即可发表文章</p>
+      <p className="muted">登录后即可发表文章、点赞、评论和关注作者</p>
       <div className="auth-tabs">
         <button type="button" className={mode === "login" ? "active" : ""} onClick={() => setMode("login")}>
           登录

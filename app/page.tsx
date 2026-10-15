@@ -1,5 +1,8 @@
-import HomeView from "@/components/HomeView";
+import Feed, { parsePage, parseSort } from "@/components/Feed";
 
-export default function Home() {
-  return <HomeView page={1} />;
+type SP = Promise<{ sort?: string; page?: string }>;
+
+export default async function Home({ searchParams }: { searchParams: SP }) {
+  const sp = await searchParams;
+  return <Feed base="/" filter={{}} sort={parseSort(sp.sort)} page={parsePage(sp.page)} />;
 }

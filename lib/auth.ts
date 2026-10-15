@@ -10,7 +10,7 @@ export { hashPassword, verifyPassword };
 const COOKIE = "purelog_session";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 天
 
-export type User = { id: number; username: string; display_name: string; is_admin: boolean };
+export type User = { id: number; username: string; display_name: string; avatar: string | null; bio: string; title: string; is_admin: boolean; is_banned: boolean };
 
 // 管理员可编辑、删除任何人的文章
 export const canManage = (user: User | null, authorId?: number) => !!user && (user.is_admin || user.id === authorId);
@@ -61,7 +61,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const uid = readSession((await cookies()).get(COOKIE)?.value);
   if (!uid) return null;
   try {
-    const rows = await query<User>("SELECT id, username, display_name, is_admin FROM users WHERE id = $1", [uid]);
+    const rows = await query<User>("SELECT id, username, display_name, avatar, bio, title, is_admin, is_banned FROM users WHERE id = $1", [uid]);
     return rows[0] ?? null;
   } catch {
     return null;

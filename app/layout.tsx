@@ -6,11 +6,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
-  title: { default: site.title, template: `%s - ${site.title}` },
+  title: { default: `${site.title} - ${site.slogan}`, template: `%s - ${site.title}` },
   description: site.description,
-  authors: [{ name: site.author }],
   alternates: { types: { "application/rss+xml": "/rss.xml" } },
-  openGraph: { type: "website", siteName: site.title, title: site.title, description: site.description, locale: "zh_CN" },
+  openGraph: { type: "website", siteName: site.title, title: `${site.title} - ${site.slogan}`, description: site.description, locale: "zh_CN" },
   icons: { icon: "/favicon.svg" },
 };
 
@@ -33,11 +32,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Header />
         <main className="container main">{children}</main>
-        <footer className="footer">
-          <div className="container">
-            © {new Date().getFullYear()} {site.author} · Powered by Next.js · <a href="/rss.xml">RSS</a>
-          </div>
-        </footer>
       </body>
     </html>
   );

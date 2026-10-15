@@ -5,8 +5,8 @@ import AuthForm from "./AuthForm";
 export const metadata = { title: "登录 / 注册", robots: { index: false } };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; mode?: string }> }) {
-  const { next = "/write", mode } = await searchParams;
-  const safe = next.startsWith("/") && !next.startsWith("//") ? next : "/write";
+  const { next = "/", mode } = await searchParams;
+  const safe = next.startsWith("/") && !next.startsWith("//") ? next : "/";
   if (await getCurrentUser()) redirect(safe);
   return (
     <div className="auth-wrap">

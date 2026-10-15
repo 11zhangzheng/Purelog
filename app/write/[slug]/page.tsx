@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { canManage, getCurrentUser } from "@/lib/auth";
-import { getArticleRow, getCategories } from "@/lib/posts";
+import { getArticleRow } from "@/lib/posts";
 import Editor from "../Editor";
 
 export const metadata = { title: "编辑文章", robots: { index: false } };
@@ -11,7 +11,6 @@ export default async function EditPage({ params }: { params: Promise<{ slug: str
   if (!user) redirect(`/login?next=/write/${encodeURIComponent(slug)}`);
   const row = await getArticleRow(slug);
   if (!row || !canManage(user, row.author_id)) notFound();
-  const categories = (await getCategories()).map((c) => c.name);
   let tags: string[] = [];
   try {
     tags = JSON.parse(row.tags);
@@ -27,7 +26,6 @@ export default async function EditPage({ params }: { params: Promise<{ slug: str
         summary: row.summary,
         cover: row.cover ?? "",
       }}
-      categories={categories}
     />
   );
 }

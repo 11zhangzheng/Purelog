@@ -1,20 +1,40 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { after } from "next/server";
+import { cache } from "react";
 import type { Metadata } from "next";
-import ArticleTools from "@/components/ArticleTools";
-import Comments from "@/components/Comments";
+import ArticleActions from "@/components/ArticleActions";
+import Avatar from "@/components/Avatar";
+import CommentSection from "@/components/CommentSection";
+import DeleteButton from "@/components/DeleteButton";
+import FollowButton from "@/components/FollowButton";
 import Toc from "@/components/Toc";
-import { formatDate, getAdjacent, getPost, getRelated } from "@/lib/posts";
-import { site } from "@/lib/site";
+import { deleteArticle } from "@/app/actions";
 import { canManage, getCurrentUser } from "@/lib/auth";
+import {
+  formatCount,
+  formatDate,
+  getComments,
+  getInteraction,
+  getMorePostsByAuthor,
+  getPost,
+  getProfile,
+  getRelated,
+  incrementViews,
+} from "@/lib/posts";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const post = await getPost((await params).slug);
+type Params = Promise<{ slug: string }>;
+
+const loadPost = cache((slug: string) => getPost(slug));
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const post = await loadPost((await params).slug);
   if (!post) return {};
   return {
     title: post.title,
     description: post.summary,
     keywords: post.tags,
+    authors: [{ name: post.author.display_name }],
     alternates: { canonical: `/posts/${post.slug}` },
     openGraph: {
       type: "article",
@@ -28,35 +48,61 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
-  const post = await getPost((await params).slug);
+export default async function PostPage({ params }: { params: Params }) {
+  const post = await loadPost((await params).slug);
   if (!post) notFound();
-  const { newer, older } = await getAdjacent(post.slug);
-  const related = await getRelated(post);
   const user = await getCurrentUser();
-  const canEdit = post.source === "db" && canManage(user, post.authorId);
+  const [interaction, comments, related, more, author] = await Promise.all([
+    getInteraction(user?.id, post.id, post.author.id),
+    getComments(post.id, user?.id),
+    getRelated(post),
+    getMorePostsByAuthor(post.author.id, post.id),
+    getProfile(post.author.username),
+  ]);
+  // 阅读数在响应发送后再累加，不阻塞渲染
+  after(() => incrementViews(post.id).catch(() => {}));
+
+  const canEdit = canManage(user, post.author.id);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
     datePublished: post.date,
-    dateModified: post.updated || post.date,
-    author: { "@type": "Person", name: post.author },
+    dateModified: post.updated,
+    author: { "@type": "Person", name: post.author.display_name },
     description: post.summary,
   };
 
   return (
-    <div className="layout">
-      <ArticleTools title={post.title} />
-      <div className="content">
+    <div className="article-layout">
+      <ArticleActions
+        articleId={post.id}
+        title={post.title}
+        likes={post.likes}
+        comments={post.comments}
+        favorites={post.favorites}
+        liked={interaction.liked}
+        favorited={interaction.favorited}
+      />
+      <div className="article-main">
         <article className="card article">
           <h1 className="article-title">{post.title}</h1>
           <div className="article-meta">
-            <span className="author">{post.author}</span>
+            <Link href={`/user/${post.author.username}`} className="author">
+              {post.author.display_name}
+            </Link>
             <time dateTime={post.date}>{formatDate(post.date)}</time>
-            <span>约 {post.words} 字</span>
+            <span>◉ {formatCount(post.views + 1)}</span>
             <span>阅读 {post.readingMinutes} 分钟</span>
-            {canEdit && <Link href={`/write/${post.slug}`} className="link">编辑</Link>}
+            {canEdit && (
+              <span className="article-manage">
+                <Link href={`/write/${post.slug}`} className="link">编辑</Link>
+                <form action={deleteArticle}>
+                  <input type="hidden" name="slug" value={post.slug} />
+                  <DeleteButton />
+                </form>
+              </span>
+            )}
           </div>
           {post.cover && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -66,37 +112,73 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
           <div className="article-footer">
             <div className="article-tags">
               <span className="muted">分类：</span>
-              <Link href={`/category/${encodeURIComponent(post.category)}`} className="tag">{post.category}</Link>
+              <Link href={`/c/${post.category}`} className="tag">{post.categoryName}</Link>
               {post.tags.length > 0 && <span className="muted">标签：</span>}
               {post.tags.map((t) => (
-                <Link key={t} href={`/tags/${encodeURIComponent(t)}`} className="tag">{t}</Link>
+                <Link key={t} href={`/tag/${encodeURIComponent(t)}`} className="tag">{t}</Link>
               ))}
             </div>
-            <nav className="post-nav">
-              {newer ? <Link href={`/posts/${newer.slug}`}>← {newer.title}</Link> : <span />}
-              {older ? <Link href={`/posts/${older.slug}`}>{older.title} →</Link> : <span />}
-            </nav>
           </div>
         </article>
-        <Comments />
-      </div>
-      <aside className="sidebar sticky">
-        <Toc headings={post.headings} />
+        <CommentSection
+          articleId={post.id}
+          authorId={post.author.id}
+          comments={comments}
+          total={post.comments}
+          viewer={user && { id: user.id, username: user.username, display_name: user.display_name, avatar: user.avatar, is_admin: user.is_admin }}
+        />
         {related.length > 0 && (
           <section className="card">
             <h3 className="card-title">相关推荐</h3>
             <ul className="related">
               {related.map((p) => (
-                <li key={p.slug}>
+                <li key={p.id}>
                   <Link href={`/posts/${p.slug}`}>{p.title}</Link>
-                  <span className="muted">{formatDate(p.date)}</span>
+                  <span className="muted">
+                    {p.author.display_name} · 👍 {p.likes} · 💬 {p.comments}
+                  </span>
                 </li>
               ))}
             </ul>
           </section>
         )}
+      </div>
+      <aside className="article-side">
+        {author && (
+          <section className="card author-card">
+            <Link href={`/user/${author.username}`} className="author-card-head">
+              <Avatar user={author} size={48} />
+              <div>
+                <div className="author-name">{author.display_name}</div>
+                <div className="muted">{author.title || author.bio || "这个人很懒，什么都没写"}</div>
+              </div>
+            </Link>
+            <div className="stats">
+              <div><b>{author.articles}</b><span>文章</span></div>
+              <div><b>{formatCount(author.views)}</b><span>阅读</span></div>
+              <div><b>{author.followers}</b><span>粉丝</span></div>
+            </div>
+            {user?.id !== author.id && <FollowButton userId={author.id} initial={interaction.following} />}
+          </section>
+        )}
+        <div className="sticky-side">
+          <Toc headings={post.headings} />
+          {more.length > 0 && (
+            <section className="card">
+              <h3 className="card-title">作者的其他文章</h3>
+              <ul className="related">
+                {more.map((p) => (
+                  <li key={p.id}>
+                    <Link href={`/posts/${p.slug}`}>{p.title}</Link>
+                    <span className="muted">◉ {p.views} · 👍 {p.likes}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </div>
       </aside>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
     </div>
   );
 }

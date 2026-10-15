@@ -1,5 +1,6 @@
 "use client";
 import { useActionState, useEffect, useRef, useState } from "react";
+import { categories } from "@/lib/site";
 import { saveArticle } from "../actions";
 
 export type EditorInitial = {
@@ -14,7 +15,7 @@ export type EditorInitial = {
 
 const DRAFT_KEY = "purelog_draft";
 
-export default function Editor({ initial, categories }: { initial: EditorInitial; categories: string[] }) {
+export default function Editor({ initial }: { initial: EditorInitial }) {
   const [state, action, pending] = useActionState(saveArticle, undefined);
   const v = { ...initial, ...state?.values };
   const [content, setContent] = useState(v.content);
@@ -80,12 +81,16 @@ export default function Editor({ initial, categories }: { initial: EditorInitial
       <div className="editor-meta card">
         <label>
           分类
-          <input name="category" list="category-list" placeholder="如：前端" defaultValue={v.category} required maxLength={20} />
-          <datalist id="category-list">
+          <select name="category" defaultValue={v.category} required>
+            <option value="" disabled>
+              请选择分类
+            </option>
             {categories.map((c) => (
-              <option key={c} value={c} />
+              <option key={c.key} value={c.key}>
+                {c.name}
+              </option>
             ))}
-          </datalist>
+          </select>
         </label>
         <label>
           标签

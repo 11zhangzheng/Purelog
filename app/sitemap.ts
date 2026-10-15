@@ -1,13 +1,19 @@
 import type { MetadataRoute } from "next";
-import { getAllPosts, getCategories, getTags } from "@/lib/posts";
-import { site } from "@/lib/site";
+import { query } from "@/lib/db";
+import { categories, site } from "@/lib/site";
 
-export const revalidate = 3600;
+export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const posts = (await getAllPosts()).map((p) => ({ url: `${site.url}/posts/${p.slug}`, lastModified: p.updated || p.date }));
-  const pages = ["", "/archive", "/tags", "/about"].map((p) => ({ url: `${site.url}${p}` }));
-  const tags = (await getTags()).map((t) => ({ url: `${site.url}/tags/${encodeURIComponent(t.name)}` }));
-  const cats = (await getCategories()).map((c) => ({ url: `${site.url}/category/${encodeURIComponent(c.name)}` }));
-  return [...pages, ...posts, ...tags, ...cats];
+  const [posts, users] = await Promise.all([
+    query<{ slug: string; updated_at: string }>("SELECT slug, updated_at FROM articles ORDER BY created_at DESC LIMIT 5000").catch(() => []),
+    query<{ username: string }>("SELECT username FROM users WHERE EXISTS (SELECT 1 FROM articles WHERE author_id = users.id) LIMIT 5000").catch(() => []),
+  ]);
+  return [
+    { url: site.url, changeFrequency: "hourly", priority: 1 },
+    { url: `${site.url}/tags` },
+    ...categories.map((c) => ({ url: `${site.url}/c/${c.key}` })),
+    ...posts.map((p) => ({ url: `${site.url}/posts/${p.slug}`, lastModified: new Date(p.updated_at) })),
+    ...users.map((u) => ({ url: `${site.url}/user/${u.username}` })),
+  ];
 }

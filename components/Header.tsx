@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { site } from "@/lib/site";
-import ThemeToggle from "./ThemeToggle";
-import SearchBox from "./SearchBox";
-import UserMenu from "./UserMenu";
 import { getCurrentUser } from "@/lib/auth";
+import { site } from "@/lib/site";
+import SearchBox from "./SearchBox";
+import ThemeToggle from "./ThemeToggle";
+import UserMenu from "./UserMenu";
 
 const nav = [
   { href: "/", label: "首页" },
-  { href: "/archive", label: "归档" },
+  { href: "/?sort=hot", label: "热榜" },
+  { href: "/following", label: "关注" },
   { href: "/tags", label: "标签" },
-  { href: "/about", label: "关于" },
 ];
 
 export default async function Header() {
@@ -19,7 +19,7 @@ export default async function Header() {
       <div className="container header-inner">
         <Link href="/" className="logo">
           <span className="logo-mark">P</span>
-          {site.title}
+          <span className="logo-text">{site.title}</span>
         </Link>
         <nav className="nav">
           {nav.map((n) => (
@@ -30,9 +30,17 @@ export default async function Header() {
         </nav>
         <div className="header-right">
           <SearchBox />
-          <Link href="/write" className="btn-primary write-btn">✎ 写文章</Link>
+          <Link href="/write" className="btn-primary write-btn">
+            创作者中心
+          </Link>
           <ThemeToggle />
-          {user ? <UserMenu name={user.display_name} /> : <Link href="/login" className="login-link">登录 | 注册</Link>}
+          {user ? (
+            <UserMenu user={{ username: user.username, display_name: user.display_name, avatar: user.avatar, is_admin: user.is_admin }} />
+          ) : (
+            <Link href="/login" className="login-link">
+              登录 | 注册
+            </Link>
+          )}
         </div>
       </div>
     </header>
