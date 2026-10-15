@@ -1,15 +1,19 @@
 import "server-only";
 import crypto from "node:crypto";
-import { promisify } from "node:util";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { query } from "./db";
+import { hashPassword, verifyPassword } from "./password";
 
-const scrypt = promisify(crypto.scrypt) as (pw: string, salt: string, len: number) => Promise<Buffer>;
+export { hashPassword, verifyPassword };
+
 const COOKIE = "purelog_session";
 const MAX_AGE = 60 * 60 * 24 * 30; // 30 天
 
-export type User = { id: number; username: string; display_name: string };
+export type User = { id: number; username: string; display_name: string; is_admin: boolean };
+
+// 管理员可编辑、删除任何人的文章
+export const canManage = (user: User | null, authorId?: number) => !!user && (user.is_admin || user.id === authorId);
 
 function secret() {
   const s = process.env.AUTH_SECRET;
@@ -18,20 +22,6 @@ function secret() {
     throw new Error("请在 Vercel 环境变量中设置 AUTH_SECRET（至少 16 位随机字符串）");
   }
   return "purelog-dev-secret-do-not-use-in-production";
-}
-
-export async function hashPassword(password: string) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const key = await scrypt(password, salt, 64);
-  return `${salt}:${key.toString("hex")}`;
-}
-
-export async function verifyPassword(password: string, stored: string) {
-  const [salt, hex] = stored.split(":");
-  if (!salt || !hex) return false;
-  const key = await scrypt(password, salt, 64);
-  const expected = Buffer.from(hex, "hex");
-  return expected.length === key.length && crypto.timingSafeEqual(key, expected);
 }
 
 function sign(payload: string) {
@@ -71,7 +61,7 @@ export const getCurrentUser = cache(async (): Promise<User | null> => {
   const uid = readSession((await cookies()).get(COOKIE)?.value);
   if (!uid) return null;
   try {
-    const rows = await query<User>("SELECT id, username, display_name FROM users WHERE id = $1", [uid]);
+    const rows = await query<User>("SELECT id, username, display_name, is_admin FROM users WHERE id = $1", [uid]);
     return rows[0] ?? null;
   } catch {
     return null;

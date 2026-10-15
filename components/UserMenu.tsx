@@ -22,7 +22,7 @@ export default function UserMenu({ name }: { name: string }) {
         <div className="user-dropdown card">
           <div className="user-dropdown-name">{name}</div>
           <Link href="/write" onClick={() => setOpen(false)}>写文章</Link>
-          <Link href="/me" onClick={() => setOpen(false)}>我的文章</Link>
+          <Link href="/me" onClick={() => setOpen(false)}>文章管理</Link>
           <form action={logout}>
             <button>退出登录</button>
           </form>

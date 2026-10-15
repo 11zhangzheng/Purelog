@@ -6,7 +6,7 @@ import Comments from "@/components/Comments";
 import Toc from "@/components/Toc";
 import { formatDate, getAdjacent, getPost, getRelated } from "@/lib/posts";
 import { site } from "@/lib/site";
-import { getCurrentUser } from "@/lib/auth";
+import { canManage, getCurrentUser } from "@/lib/auth";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const post = await getPost((await params).slug);
@@ -34,7 +34,7 @@ export default async function PostPage({ params }: { params: Promise<{ slug: str
   const { newer, older } = await getAdjacent(post.slug);
   const related = await getRelated(post);
   const user = await getCurrentUser();
-  const canEdit = post.source === "db" && user?.id === post.authorId;
+  const canEdit = post.source === "db" && canManage(user, post.authorId);
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "BlogPosting",

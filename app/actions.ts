@@ -2,7 +2,7 @@
 import crypto from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
+import { canManage, createSession, destroySession, getCurrentUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { query } from "@/lib/db";
 import { getArticleRow } from "@/lib/posts";
 
@@ -108,7 +108,7 @@ export async function saveArticle(_: FormState, fd: FormData): Promise<FormState
   try {
     if (id) {
       const [row] = await query<{ slug: string; author_id: number }>("SELECT slug, author_id FROM articles WHERE id = $1", [Number(id)]);
-      if (!row || row.author_id !== user.id) return { error: "文章不存在或无权编辑", values };
+      if (!row || !canManage(user, row.author_id)) return { error: "文章不存在或无权编辑", values };
       slug = row.slug;
       await query(
         `UPDATE articles SET title=$1, content=$2, summary=$3, category=$4, tags=$5, cover=$6, updated_at=now() WHERE id=$7`,
@@ -133,7 +133,7 @@ export async function deleteArticle(fd: FormData) {
   if (!user) redirect("/login");
   const slug = str(fd, "slug");
   const row = await getArticleRow(slug);
-  if (row && row.author_id === user.id) {
+  if (row && canManage(user, row.author_id)) {
     await query("DELETE FROM articles WHERE id = $1", [row.id]);
     revalidatePath("/", "layout");
   }

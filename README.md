@@ -16,6 +16,8 @@ npm run build   # 生产构建
 点击顶栏「写文章」→ 未登录会跳转到登录 / 注册页 → 登录后进入 Markdown 编辑器（实时预览、本地自动保存草稿）→ 发布。
 「我的文章」页可编辑、删除自己发表的文章。网页端文章存储在 Postgres 中，内容经过 XSS 过滤。
 
+**管理员**：本地默认账号 `admin` / `123456`（可用 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 修改），可在「文章管理」中编辑、删除全站文章。线上必须在环境变量中设置 `ADMIN_PASSWORD`（强密码）才会创建管理员。
+
 ## 用 Markdown 文件写文章
 在 `posts/` 下新建 `xxx.md`，文件名即 URL：
 ```yaml
@@ -35,7 +37,7 @@ draft: false          # true 时生产环境不发布
 1. 推送到 GitHub，在 [vercel.com/new](https://vercel.com/new) 导入仓库
 2. 项目的 **Storage** 页创建一个 Postgres（Neon）数据库并连接到项目，会自动注入 `DATABASE_URL`，首次访问时自动建表
 3. 在 Settings → Environment Variables 添加 `AUTH_SECRET`（`openssl rand -base64 32` 生成）
-4. 建议设置 `REGISTER_INVITE_CODE`，只有拿到邀请码的人才能注册
+4. 设置 `ADMIN_PASSWORD`（强密码）以创建管理员账号；建议设置 `REGISTER_INVITE_CODE`，只有拿到邀请码的人才能注册
 5. Deploy（修改环境变量后需要 Redeploy）
 
 其余可选变量见 `.env.example`。

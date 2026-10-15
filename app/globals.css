@@ -270,3 +270,4 @@ mark { background: #ffe58f; color: inherit; padding: 0 1px; }
   .write-btn { display: none; }
   .nav a:nth-child(n + 3) { display: none; }
 }
+.admin-badge { margin-left: 6px; padding: 0 6px; border-radius: 2px; background: #ff7d00; color: #fff; font-size: 12px; }

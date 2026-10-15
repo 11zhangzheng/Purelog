@@ -141,8 +141,11 @@ export async function getArticleRow(slug: string) {
   return rows[0] ?? null;
 }
 
-export async function getPostsByAuthor(authorId: number) {
-  const rows = await query<ArticleRow>(`${ARTICLE_SELECT} WHERE a.author_id = $1 ORDER BY a.created_at DESC`, [authorId]);
+export async function getPostsByAuthor(authorId: number | "all") {
+  const rows =
+    authorId === "all"
+      ? await query<ArticleRow>(`${ARTICLE_SELECT} ORDER BY a.created_at DESC`)
+      : await query<ArticleRow>(`${ARTICLE_SELECT} WHERE a.author_id = $1 ORDER BY a.created_at DESC`, [authorId]);
   return rows.map(rowMeta);
 }
 

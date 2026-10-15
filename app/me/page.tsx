@@ -5,19 +5,22 @@ import { formatDate, getPostsByAuthor } from "@/lib/posts";
 import { deleteArticle } from "../actions";
 import DeleteButton from "./DeleteButton";
 
-export const metadata = { title: "我的文章", robots: { index: false } };
+export const metadata = { title: "文章管理", robots: { index: false } };
 
 export default async function MePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/me");
-  const posts = await getPostsByAuthor(user.id);
+  const posts = await getPostsByAuthor(user.is_admin ? "all" : user.id);
   return (
     <div className="card page-card">
       <div className="me-head">
         <div className="avatar small">{user.display_name.slice(0, 1)}</div>
         <div>
           <h1 className="page-title">{user.display_name}</h1>
-          <span className="muted">@{user.username} · 共 {posts.length} 篇文章</span>
+          <span className="muted">
+            @{user.username}
+            {user.is_admin && <span className="admin-badge">管理员</span>} · {user.is_admin ? "全站" : "共"} {posts.length} 篇文章
+          </span>
         </div>
         <Link href="/write" className="btn-primary">写文章</Link>
       </div>
@@ -30,7 +33,7 @@ export default async function MePage() {
               <div>
                 <Link href={`/posts/${p.slug}`} className="my-post-title">{p.title}</Link>
                 <div className="muted">
-                  {formatDate(p.date)} · {p.category} · {p.words} 字
+                  {formatDate(p.date)} · {p.category} · {p.words} 字{user.is_admin && ` · 作者：${p.author}`}
                 </div>
               </div>
               <div className="my-post-actions">
